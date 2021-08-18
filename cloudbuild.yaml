@@ -1,0 +1,58 @@
+steps:
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  args: [ '-c', 'gcloud secrets versions access latest --secret=github-ssh-key > /root/.ssh/id_github' ]
+  volumes:
+  - name: ssh
+    path: /root/.ssh
+
+- name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  args: [ '-c', 'md5sum /root/.ssh/id_github' ]
+  volumes:
+  - name: ssh
+    path: /root/.ssh
+
+- name: 'gcr.io/cloud-builders/docker'
+  entrypoint: 'bash'
+  args: [ '-c', 'docker build --build-arg "SSH_PRIVATE_KEY=$(cat /root/.ssh/id_github)"  -t asia.gcr.io/$PROJECT_ID/$_IMAGE -t asia.gcr.io/$PROJECT_ID/$_SERVICE:latest .' ]
+  timeout: 500s
+  volumes:
+  - name: ssh
+    path: /root/.ssh
+
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'asia.gcr.io/$PROJECT_ID/$_IMAGE']
+
+- name: 'gcr.io/cloud-builders/git'
+  entrypoint: /bin/sh
+  args:
+    - '-c'
+    - |
+      set -x && \
+      chmod 600 /root/.ssh/id_github && \
+      ssh-keyscan github.com >> /root/.ssh/known_hosts && \
+      ssh-agent bash -c 'ssh-add /root/.ssh/id_github; \
+      git clone -b $BRANCH_NAME git@github.com:ridebeam/k8s-config.git appcfg'
+  volumes:
+    - name: ssh
+      path: /root/.ssh
+
+- name: 'gcr.io/$PROJECT_ID/kustomize'
+  entrypoint: 'bash'
+  args: ['-c', 'appcfg/.cloudbuild/set-version.sh']
+  env:
+    - '_SERVICE=$_SERVICE'
+    - '_IMAGE=$_IMAGE'
+    - 'PROJECT_ID=$PROJECT_ID'
+    - 'BRANCH_NAME=$BRANCH_NAME'
+    - 'SHORT_SHA=$SHORT_SHA'
+  volumes:
+    - name: ssh
+      path: /root/.ssh
+
+timeout: 660s
+substitutions:
+  _SERVICE: 'change-me-service-name'
+  _IMAGE: '${_SERVICE}:${SHORT_SHA}'
+images: ['asia.gcr.io/$PROJECT_ID/$_IMAGE', 'asia.gcr.io/$PROJECT_ID/$_SERVICE:latest']

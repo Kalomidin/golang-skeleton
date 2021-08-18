@@ -1,0 +1,14 @@
+---
+
+server:
+  port: 8998 // change-me find a non-conflicting port, and use +1 for TLS
+  portTLS: 8999
+
+kafka:
+  connection:
+    brokers: "localhost:9092"
+    username: user
+    password: password
+    certLocation: "/usr/local/etc/openssl@1.1/cert.pem"
+    overrides:
+      security.protocol: plaintext
